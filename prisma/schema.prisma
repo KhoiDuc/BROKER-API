@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PositionStatus {
+  ChuaQuyet
+  ChoMua
+  NamGiu
+  CatLo
+  ChotLoi
+  BoTheoDoi
+}
+
+enum NoteKind {
+  Broker
+  Self
+}
+
+enum LevelInputMode {
+  Price
+  Percent
+}
+
+model Position {
+  id                 String          @id @default(uuid())
+  symbol             String          @unique
+  sector             String          @default("")
+  status             PositionStatus  @default(ChuaQuyet)
+  stopLoss           Decimal?        @db.Decimal(18, 4)
+  stopLossMode       LevelInputMode?
+  stopLossInput      Decimal?        @db.Decimal(18, 4)
+  targetPrice        Decimal?        @db.Decimal(18, 4)
+  targetPriceMode    LevelInputMode?
+  targetPriceInput   Decimal?        @db.Decimal(18, 4)
+  weightPct          Decimal?        @db.Decimal(18, 4)
+  entryLow           Decimal?        @db.Decimal(18, 4)
+  entryHigh          Decimal?        @db.Decimal(18, 4)
+  recommendationText String?
+  tags               String[]
+  isArchived         Boolean         @default(false)
+  buys               BuyLot[]
+  sells              Sell[]
+  notes              Note[]
+  dividends          Dividend[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model BuyLot {
+  id               String          @id
+  positionId       String
+  position         Position        @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  boughtAt         DateTime        @db.Date
+  price            Decimal         @db.Decimal(18, 4)
+  quantity         Decimal?        @db.Decimal(18, 4)
+  stopLoss         Decimal?        @db.Decimal(18, 4)
+  stopLossMode     LevelInputMode?
+  stopLossInput    Decimal?        @db.Decimal(18, 4)
+  targetPrice      Decimal?        @db.Decimal(18, 4)
+  targetPriceMode  LevelInputMode?
+  targetPriceInput Decimal?        @db.Decimal(18, 4)
+  note             String?
+  tags             String[]
+}
+
+model Sell {
+  id         String   @id
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  soldAt     DateTime @db.Date
+  price      Decimal  @db.Decimal(18, 4)
+  quantity   Decimal? @db.Decimal(18, 4)
+  fee        Decimal? @db.Decimal(18, 4)
+  tax        Decimal? @db.Decimal(18, 4)
+  note       String?
+}
+
+model Note {
+  id         String   @id
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  at         DateTime
+  kind       NoteKind @default(Broker)
+  text       String
+  aiExplain  String?
+}
+
+model Dividend {
+  id             String    @id
+  positionId     String
+  position       Position  @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  exDate         DateTime  @db.Date
+  payDate        DateTime? @db.Date
+  amountPerShare Decimal   @db.Decimal(18, 4)
+  quantity       Int
+  note           String?
+}

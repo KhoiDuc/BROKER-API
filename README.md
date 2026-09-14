@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# broker-api
 
-## Getting Started
+Next.js API for broker portfolio (stock recommendations). Postgres on Supabase, deploy on Vercel.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. Copy `.env.example` to `.env.local` and fill in Supabase + API key:
+
+```powershell
+copy .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- `DATABASE_URL` — Supabase pooler (port **6543**)
+- `DIRECT_URL` — Supabase direct (port **5432**) for migrations
+- `API_KEY` — Bearer token for `PUT /api/portfolio`
+- `ALLOWED_ORIGIN` — Blazor GitHub Pages URL (CORS)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. Install and migrate:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npm run db:seed
+```
 
-## Learn More
+3. Run locally:
 
-To learn more about Next.js, take a look at the following resources:
+```powershell
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/portfolio` | No | Full portfolio JSON |
+| PUT | `/api/portfolio` | Bearer `API_KEY` | Replace portfolio |
+| OPTIONS | `/api/portfolio` | No | CORS preflight |
 
-## Deploy on Vercel
+### Test
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```powershell
+curl http://localhost:3000/api/portfolio
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+curl -X PUT http://localhost:3000/api/portfolio `
+  -H "Authorization: Bearer YOUR_API_KEY" `
+  -H "Content-Type: application/json" `
+  -d "@seed/portfolio.json"
+```
+
+## Deploy (Vercel)
+
+1. Push repo to GitHub
+2. Import project in Vercel
+3. Set env vars: `DATABASE_URL`, `DIRECT_URL`, `API_KEY`, `ALLOWED_ORIGIN`
+4. Build command: `npx prisma generate && npm run build`
+5. After deploy, run migration against production DB:
+
+```powershell
+npx prisma migrate deploy
+npm run db:seed
+```
+
+## Blazor integration
+
+In `BlazorWasmPortfolioGhAction/wwwroot/appsettings.json`:
+
+```json
+"BrokerApi": {
+  "BaseUrl": "https://your-app.vercel.app",
+  "ApiKey": "same-as-API_KEY"
+}
+```

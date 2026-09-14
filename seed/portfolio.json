@@ -1,0 +1,238 @@
+{
+  "updatedAt": "2026-08-26T14:00:00+07:00",
+  "positions": [
+    {
+      "symbol": "BVH",
+      "sector": "",
+      "status": "NamGiu",
+      "stopLoss": null,
+      "targetPrice": null,
+      "weightPct": null,
+      "buys": [
+        {
+          "id": "bvh1",
+          "boughtAt": "2026-08-26",
+          "price": 71.012,
+          "quantity": 100,
+          "note": "MBS — giá vốn TB 71,012"
+        }
+      ],
+      "notes": [
+        {
+          "id": "nbvh1",
+          "at": "2026-08-26T00:00:00+07:00",
+          "kind": "Self",
+          "text": "Import danh mục MBS (đang nắm giữ). Giá TT lúc chụp ~63.6."
+        }
+      ]
+    },
+    {
+      "symbol": "CTI",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "cti1",
+          "boughtAt": "2026-08-26",
+          "price": 19.85,
+          "quantity": 550,
+          "note": "MBS — giá vốn TB 19,850"
+        }
+      ],
+      "notes": [
+        {
+          "id": "ncti1",
+          "at": "2026-08-26T00:00:00+07:00",
+          "kind": "Self",
+          "text": "Import MBS. KL giao dịch 500/550."
+        }
+      ]
+    },
+    {
+      "symbol": "SHB",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "shb1",
+          "boughtAt": "2026-08-26",
+          "price": 13.514,
+          "quantity": 230,
+          "note": "MBS — gộp TK Thường 200 + TK 07 (30), giá TB 13,514"
+        }
+      ],
+      "notes": [
+        {
+          "id": "nshb1",
+          "at": "2026-08-26T00:00:00+07:00",
+          "kind": "Self",
+          "text": "Import MBS. 2 dòng SHB đã gộp 1 mã."
+        }
+      ]
+    },
+    {
+      "symbol": "SHS",
+      "sector": "",
+      "status": "NamGiu",
+      "stopLoss": 14.9,
+      "targetPrice": 17.1,
+      "buys": [
+        {
+          "id": "shs1",
+          "boughtAt": "2026-08-26",
+          "price": 15.62,
+          "quantity": 100,
+          "note": "Mua thực tế @15.62 × 100 CP"
+        }
+      ],
+      "notes": [
+        {
+          "id": "nshs1",
+          "at": "2026-08-26T14:00:00+07:00",
+          "kind": "Broker",
+          "text": "#SHS @All\n\nMua quanh 15.5–15.6\nDừng lỗ: nếu gãy 14.9\nMục tiêu 1: 17.1\nMục tiêu 2: 18.2\n\nLý do: sau hơn phiên bùng nổ hàng về lực bán hấp thụ tốt, cung không trào ra, trạng thái duy trì tốt trên 1/2 phiên đẩy giá. Phiên nay anh chị có thể mua mới trading hoặc mua thêm để hạ giá vốn, canh đánh nhịp để lướt nếu kẹt hàng."
+        },
+        {
+          "id": "nshs2",
+          "at": "2026-08-26T14:00:00+07:00",
+          "kind": "Self",
+          "text": "Đã mua 100 CP @15.62. TP2 ghi nhận 18.2 (TP1 = 17.1 đặt ở mục tiêu cấp mã)."
+        }
+      ]
+    },
+    {
+      "symbol": "VCG",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "vcg1",
+          "boughtAt": "2026-08-26",
+          "price": 18.411,
+          "quantity": 316,
+          "note": "MBS — gộp TK Thường 300 + TK 07 (16), giá TB 18,411"
+        }
+      ],
+      "notes": [
+        {
+          "id": "nvcg1",
+          "at": "2026-08-26T00:00:00+07:00",
+          "kind": "Self",
+          "text": "Import MBS. 2 dòng VCG đã gộp 1 mã."
+        }
+      ]
+    },
+    {
+      "symbol": "MSN",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "msn1",
+          "boughtAt": "2026-08-26",
+          "price": 73.03,
+          "quantity": 700,
+          "note": "VPS — giá vốn 73.03"
+        }
+      ],
+      "notes": [
+        {
+          "id": "nmsn1",
+          "at": "2026-08-26T00:00:00+07:00",
+          "kind": "Self",
+          "text": "Import VPS. Giá TT lúc chụp ~69.5."
+        }
+      ]
+    },
+    {
+      "symbol": "BSR",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "bsr1",
+          "boughtAt": "2026-08-26",
+          "price": 28.12,
+          "quantity": 500,
+          "note": "VPS — giá vốn 28.12"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "symbol": "VPB",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "vpb1",
+          "boughtAt": "2026-08-26",
+          "price": 27.62,
+          "quantity": 200,
+          "note": "VPS — giá vốn 27.62"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "symbol": "NVL",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "nvl1",
+          "boughtAt": "2026-08-26",
+          "price": 13.06,
+          "quantity": 103,
+          "note": "VPS — giá vốn 13.06"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "symbol": "EVF",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "evf1",
+          "boughtAt": "2026-08-26",
+          "price": 13.12,
+          "quantity": 100,
+          "note": "VPS — giá vốn 13.12"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "symbol": "TCB",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "tcb1",
+          "boughtAt": "2026-08-26",
+          "price": 32.95,
+          "quantity": 100,
+          "note": "VPS — giá vốn 32.95"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "symbol": "HPG",
+      "sector": "",
+      "status": "NamGiu",
+      "buys": [
+        {
+          "id": "hpg1",
+          "boughtAt": "2026-08-26",
+          "price": 24.72,
+          "quantity": 20,
+          "note": "VPS — giá vốn 24.72"
+        }
+      ],
+      "notes": []
+    }
+  ]
+}
