@@ -9,7 +9,7 @@ const positionInclude = {
   dividends: true,
 } as const;
 
-export async function getPortfolio(): Promise<BrokerPortfolioJson> {
+export async function getPortfolio() {
   const rows = await prisma.position.findMany({
     include: positionInclude,
     orderBy: { symbol: "asc" },
@@ -17,17 +17,34 @@ export async function getPortfolio(): Promise<BrokerPortfolioJson> {
   return toBrokerPortfolio(rows);
 }
 
-export async function savePortfolio(portfolio: BrokerPortfolioJson): Promise<BrokerPortfolioJson> {
+export async function savePortfolio(portfolio: BrokerPortfolioJson) {
   const positions = fromBrokerPortfolio(portfolio);
   const symbols = positions.map((position) => position.symbol);
+  console.log(`[portfolio-service] Saving ${positions.length} positions in single transaction…`);
 
-  for (const position of positions) {
-    await upsertPositionWithClient(prisma, position);
+  try {
+    // Single transaction — all upserts + deletes in one DB round-trip batch
+    await prisma.$transaction(async (tx) => {
+      for (const position of positions) {
+        await upsertPositionWithClient(tx, position);
+      }
+
+      // Delete positions not in the incoming payload
+      if (symbols.length > 0) {
+        await tx.position.deleteMany({
+          where: { symbol: { notIn: symbols } },
+        });
+      } else {
+        await tx.position.deleteMany({});
+      }
+    });
+
+    console.log(`[portfolio-service] Transaction OK — ${positions.length} positions saved`);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[portfolio-service] Transaction FAIL:", msg);
+    throw new Error(`Save failed: ${msg}`);
   }
-
-  await prisma.position.deleteMany({
-    where: symbols.length ? { symbol: { notIn: symbols } } : {},
-  });
 
   return getPortfolio();
 }
