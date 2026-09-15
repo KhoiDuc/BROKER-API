@@ -21,22 +21,20 @@ export async function savePortfolio(portfolio: BrokerPortfolioJson): Promise<Bro
   const positions = fromBrokerPortfolio(portfolio);
   const symbols = positions.map((position) => position.symbol);
 
-  await prisma.$transaction(async (tx) => {
-    for (const position of positions) {
-      await upsertPositionWithClient(tx, position);
-    }
+  for (const position of positions) {
+    await upsertPositionWithClient(prisma, position);
+  }
 
-    await tx.position.deleteMany({
-      where: symbols.length ? { symbol: { notIn: symbols } } : {},
-    });
+  await prisma.position.deleteMany({
+    where: symbols.length ? { symbol: { notIn: symbols } } : {},
   });
 
   return getPortfolio();
 }
 
-type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+type DbClient = typeof prisma;
 
-async function upsertPositionWithClient(tx: TransactionClient, position: PositionUpsertInput) {
+async function upsertPositionWithClient(tx: DbClient, position: PositionUpsertInput) {
   const buyIds = position.buys.map((lot) => lot.id);
   const sellIds = position.sells.map((sell) => sell.id);
   const noteIds = position.notes.map((note) => note.id);

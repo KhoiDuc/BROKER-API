@@ -9,6 +9,7 @@ import { getPortfolio, savePortfolio } from "@/lib/portfolio-service";
 import type { BrokerPortfolioJson } from "@/lib/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function OPTIONS() {
   return corsPreflightResponse();
