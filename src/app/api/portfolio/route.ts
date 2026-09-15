@@ -5,11 +5,11 @@ import {
   requireApiKey,
   serverErrorResponse,
 } from "@/lib/guard";
-import { getPortfolio, savePortfolio } from "@/lib/portfolio-service";
-import type { BrokerPortfolioJson } from "@/lib/types";
+import { createPosition, getPortfolio } from "@/lib/portfolio-service";
+import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 export async function OPTIONS(request: Request) {
   return corsPreflightResponse(request);
@@ -30,25 +30,21 @@ export async function PUT(request: Request) {
   const authError = requireApiKey(request);
   if (authError) return authError;
 
-  let body: BrokerPortfolioJson;
+  let body: BrokerPositionJson & { closedPositions?: BrokerPositionJson[] };
   try {
-    body = (await request.json()) as BrokerPortfolioJson;
+    body = await request.json();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid JSON body";
-    console.error("[PUT /api/portfolio] JSON parse fail:", error);
     return badRequestResponse(`Invalid JSON: ${message}`, request);
   }
 
-  if (!body || !Array.isArray(body.positions)) {
+  if (!body || !Array.isArray((body as any).positions)) {
     return badRequestResponse("Invalid portfolio payload — positions must be an array", request);
   }
 
-  const positionCount = body.positions.length + (body.closedPositions?.length ?? 0);
-  console.log(`[PUT /api/portfolio] Saving ${positionCount} positions…`);
-
   try {
-    const saved = await savePortfolio(body);
-    console.log(`[PUT /api/portfolio] OK — saved ${saved.positions.length} active, ${saved.closedPositions?.length ?? 0} closed`);
+    const { savePortfolio } = await import("@/lib/portfolio-service");
+    const saved = await savePortfolio(body as any);
     return jsonResponse(saved, request);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save portfolio";
