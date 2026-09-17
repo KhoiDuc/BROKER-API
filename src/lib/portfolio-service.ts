@@ -170,7 +170,7 @@ export async function updatePosition(symbol: string, data: BrokerPositionJson) {
       entryHigh: data.entryHigh ?? null,
       recommendationText: data.recommendationText?.trim() ?? null,
       tags: data.tags ?? [],
-      isArchived: data.status ? false : undefined, // don't change isArchived on plain update
+      isArchived: data.status === "DaDong" ? true : (data.status ? false : undefined),
     },
     include: positionInclude,
   });

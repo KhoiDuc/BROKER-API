@@ -15,6 +15,7 @@ enum PositionStatus {
   CatLo
   ChotLoi
   BoTheoDoi
+  DaDong
 }
 
 enum NoteKind {

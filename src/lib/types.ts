@@ -4,7 +4,8 @@ export type PositionStatus =
   | "NamGiu"
   | "CatLo"
   | "ChotLoi"
-  | "BoTheoDoi";
+  | "BoTheoDoi"
+  | "DaDong";
 
 export type NoteKind = "Broker" | "Self";
 
