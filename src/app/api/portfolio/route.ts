@@ -2,7 +2,7 @@ import {
   badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
-  requireApiKey,
+  requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
 import { createPosition, getPortfolio } from "@/lib/portfolio-service";
@@ -16,6 +16,9 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const authError = await requireAuth(request);
+  if (authError) return authError;
+
   try {
     const portfolio = await getPortfolio();
     return jsonResponse(portfolio, request);
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   let body: BrokerPositionJson & { closedPositions?: BrokerPositionJson[] };

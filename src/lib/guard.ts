@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
+import { extractBearerToken, verifyAccessToken } from "@/lib/auth";
 
-const allowedOrigins: string[] = (
-  process.env.ALLOWED_ORIGINS ||
-  process.env.ALLOWED_ORIGIN ||
-  ""
-)
+const allowedOrigins: string[] = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
@@ -60,8 +57,27 @@ export function requireApiKey(request: Request): NextResponse | null {
     return serverErrorResponse("API_KEY is not configured", request);
   }
 
-  const auth = request.headers.get("authorization")?.trim();
-  if (!auth || auth !== `Bearer ${expected}`) {
+  const token = extractBearerToken(request);
+  if (!token || token !== expected) {
+    return unauthorizedResponse(request);
+  }
+
+  return null;
+}
+
+export async function requireAuth(request: Request): Promise<NextResponse | null> {
+  const token = extractBearerToken(request);
+  if (!token) {
+    return unauthorizedResponse(request);
+  }
+
+  const apiKey = process.env.API_KEY?.trim();
+  if (apiKey && token === apiKey) {
+    return null;
+  }
+
+  const payload = await verifyAccessToken(token);
+  if (!payload) {
     return unauthorizedResponse(request);
   }
 

@@ -3,7 +3,7 @@ import {
   corsPreflightResponse,
   jsonResponse,
   notFoundResponse,
-  requireApiKey,
+  requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
 import { addSell } from "@/lib/portfolio-service";
@@ -17,7 +17,7 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol } = await params;

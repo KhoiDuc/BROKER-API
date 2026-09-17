@@ -4,7 +4,7 @@ import {
   jsonResponse,
   noContentResponse,
   notFoundResponse,
-  requireApiKey,
+  requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
 import { updatePosition, deletePosition, archivePosition } from "@/lib/portfolio-service";
@@ -18,7 +18,7 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol } = await params;
@@ -43,7 +43,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ symbol: string }> }) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol } = await params;

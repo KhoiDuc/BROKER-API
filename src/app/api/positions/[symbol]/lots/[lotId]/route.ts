@@ -4,7 +4,7 @@ import {
   jsonResponse,
   noContentResponse,
   notFoundResponse,
-  requireApiKey,
+  requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
 import { updateLot, deleteLot } from "@/lib/portfolio-service";
@@ -21,7 +21,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ symbol: string; lotId: string }> },
 ) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol, lotId } = await params;
@@ -49,7 +49,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ symbol: string; lotId: string }> },
 ) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol, lotId } = await params;

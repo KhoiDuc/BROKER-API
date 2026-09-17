@@ -2,7 +2,7 @@ import {
   corsPreflightResponse,
   noContentResponse,
   notFoundResponse,
-  requireApiKey,
+  requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
 import { deleteDividend } from "@/lib/portfolio-service";
@@ -18,7 +18,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ symbol: string; dividendId: string }> },
 ) {
-  const authError = requireApiKey(request);
+  const authError = await requireAuth(request);
   if (authError) return authError;
 
   const { symbol, dividendId } = await params;
