@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { fromBrokerPortfolio, toBrokerPortfolio, type PositionUpsertInput } from "./mapper";
+import { fromBrokerPortfolio, mapDividend, mapLot, mapNote, mapPosition, mapSell, toBrokerPortfolio, type PositionUpsertInput } from "./mapper";
 import type { BrokerPortfolioJson, BrokerPositionJson, BrokerLotJson, BrokerSellJson, BrokerNoteJson, BrokerDividendJson } from "./types";
 import type { PositionStatus, NoteKind, LevelInputMode } from "@prisma/client";
 
@@ -18,6 +18,16 @@ export async function getPortfolio() {
     orderBy: { symbol: "asc" },
   });
   return toBrokerPortfolio(rows);
+}
+
+export async function getPosition(symbol: string) {
+  const sym = normalizeSymbol(symbol);
+  const row = await prisma.position.findUnique({
+    where: { symbol: sym },
+    include: positionInclude,
+  });
+  if (!row) return null;
+  return mapPosition(row);
 }
 
 export async function savePortfolio(portfolio: BrokerPortfolioJson) {
@@ -92,7 +102,7 @@ function ensureId(id: string | undefined, prefix: string): string {
 
 export async function createPosition(data: BrokerPositionJson) {
   const symbol = normalizeSymbol(data.symbol);
-  return prisma.position.create({
+  const created = await prisma.position.create({
     data: {
       symbol,
       sector: data.sector?.trim() ?? "",
@@ -150,11 +160,12 @@ export async function createPosition(data: BrokerPositionJson) {
     },
     include: positionInclude,
   });
+  return mapPosition(created);
 }
 
 export async function updatePosition(symbol: string, data: BrokerPositionJson) {
   const sym = normalizeSymbol(symbol);
-  return prisma.position.update({
+  const updated = await prisma.position.update({
     where: { symbol: sym },
     data: {
       sector: data.sector?.trim() ?? "",
@@ -174,6 +185,7 @@ export async function updatePosition(symbol: string, data: BrokerPositionJson) {
     },
     include: positionInclude,
   });
+  return mapPosition(updated);
 }
 
 export async function deletePosition(symbol: string) {
@@ -181,13 +193,21 @@ export async function deletePosition(symbol: string) {
   await prisma.position.delete({ where: { symbol: sym } });
 }
 
-export async function archivePosition(symbol: string, isArchived: boolean) {
+export async function archivePosition(
+  symbol: string,
+  isArchived: boolean,
+  status?: PositionStatus,
+) {
   const sym = normalizeSymbol(symbol);
-  return prisma.position.update({
+  const updated = await prisma.position.update({
     where: { symbol: sym },
-    data: { isArchived },
+    data: {
+      isArchived,
+      ...(status ? { status } : {}),
+    },
     include: positionInclude,
   });
+  return mapPosition(updated);
 }
 
 // ── BuyLot CRUD ──
@@ -197,7 +217,7 @@ export async function addLot(symbol: string, data: BrokerLotJson) {
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  return prisma.buyLot.create({
+  const created = await prisma.buyLot.create({
     data: {
       id: ensureId(data.id, `${sym.toLowerCase()}b`),
       positionId: position.id,
@@ -214,6 +234,7 @@ export async function addLot(symbol: string, data: BrokerLotJson) {
       tags: data.tags ?? [],
     },
   });
+  return mapLot(created);
 }
 
 export async function updateLot(symbol: string, lotId: string, data: BrokerLotJson) {
@@ -221,7 +242,7 @@ export async function updateLot(symbol: string, lotId: string, data: BrokerLotJs
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  return prisma.buyLot.update({
+  const updated = await prisma.buyLot.update({
     where: { id: lotId },
     data: {
       boughtAt: parseDate(data.boughtAt),
@@ -237,6 +258,7 @@ export async function updateLot(symbol: string, lotId: string, data: BrokerLotJs
       tags: data.tags ?? [],
     },
   });
+  return mapLot(updated);
 }
 
 export async function deleteLot(symbol: string, lotId: string) {
@@ -250,7 +272,7 @@ export async function addSell(symbol: string, data: BrokerSellJson) {
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  return prisma.sell.create({
+  const created = await prisma.sell.create({
     data: {
       id: ensureId(data.id, `${sym.toLowerCase()}s`),
       positionId: position.id,
@@ -262,10 +284,11 @@ export async function addSell(symbol: string, data: BrokerSellJson) {
       note: data.note?.trim() ?? null,
     },
   });
+  return mapSell(created);
 }
 
 export async function updateSell(symbol: string, sellId: string, data: BrokerSellJson) {
-  return prisma.sell.update({
+  const updated = await prisma.sell.update({
     where: { id: sellId },
     data: {
       soldAt: parseDate(data.soldAt),
@@ -276,6 +299,7 @@ export async function updateSell(symbol: string, sellId: string, data: BrokerSel
       note: data.note?.trim() ?? null,
     },
   });
+  return mapSell(updated);
 }
 
 export async function deleteSell(symbol: string, sellId: string) {
@@ -289,7 +313,7 @@ export async function addNote(symbol: string, data: BrokerNoteJson) {
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  return prisma.note.create({
+  const created = await prisma.note.create({
     data: {
       id: ensureId(data.id, `${sym.toLowerCase()}n`),
       positionId: position.id,
@@ -299,10 +323,11 @@ export async function addNote(symbol: string, data: BrokerNoteJson) {
       aiExplain: data.aiExplain?.trim() ?? null,
     },
   });
+  return mapNote(created);
 }
 
 export async function updateNote(symbol: string, noteId: string, data: BrokerNoteJson) {
-  return prisma.note.update({
+  const updated = await prisma.note.update({
     where: { id: noteId },
     data: {
       at: parseDate(data.at),
@@ -311,6 +336,7 @@ export async function updateNote(symbol: string, noteId: string, data: BrokerNot
       aiExplain: data.aiExplain?.trim() ?? null,
     },
   });
+  return mapNote(updated);
 }
 
 export async function deleteNote(symbol: string, noteId: string) {
@@ -324,7 +350,7 @@ export async function addDividend(symbol: string, data: BrokerDividendJson) {
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  return prisma.dividend.create({
+  const created = await prisma.dividend.create({
     data: {
       id: ensureId(data.id, `${sym.toLowerCase()}d`),
       positionId: position.id,
@@ -335,6 +361,21 @@ export async function addDividend(symbol: string, data: BrokerDividendJson) {
       note: data.note?.trim() ?? null,
     },
   });
+  return mapDividend(created);
+}
+
+export async function updateDividend(symbol: string, dividendId: string, data: BrokerDividendJson) {
+  const updated = await prisma.dividend.update({
+    where: { id: dividendId },
+    data: {
+      exDate: parseDate(data.exDate),
+      payDate: data.payDate ? parseDate(data.payDate) : null,
+      amountPerShare: data.amountPerShare,
+      quantity: data.quantity,
+      note: data.note?.trim() ?? null,
+    },
+  });
+  return mapDividend(updated);
 }
 
 export async function deleteDividend(symbol: string, dividendId: string) {

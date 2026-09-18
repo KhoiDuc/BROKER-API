@@ -40,7 +40,7 @@ function formatDateTime(value: Date): string {
   return value.toISOString();
 }
 
-function mapLot(lot: BuyLot): BrokerLotJson {
+export function mapLot(lot: BuyLot): BrokerLotJson {
   return {
     id: lot.id,
     boughtAt: formatDate(lot.boughtAt),
@@ -57,7 +57,7 @@ function mapLot(lot: BuyLot): BrokerLotJson {
   };
 }
 
-function mapSell(sell: Sell): BrokerSellJson {
+export function mapSell(sell: Sell): BrokerSellJson {
   return {
     id: sell.id,
     soldAt: formatDate(sell.soldAt),
@@ -69,7 +69,7 @@ function mapSell(sell: Sell): BrokerSellJson {
   };
 }
 
-function mapNote(note: Note): BrokerNoteJson {
+export function mapNote(note: Note): BrokerNoteJson {
   return {
     id: note.id,
     at: formatDateTime(note.at),
@@ -79,7 +79,7 @@ function mapNote(note: Note): BrokerNoteJson {
   };
 }
 
-function mapDividend(dividend: Dividend): BrokerDividendJson {
+export function mapDividend(dividend: Dividend): BrokerDividendJson {
   return {
     id: dividend.id,
     exDate: formatDate(dividend.exDate),
@@ -90,7 +90,7 @@ function mapDividend(dividend: Dividend): BrokerDividendJson {
   };
 }
 
-function mapPosition(position: PositionWithChildren): BrokerPositionJson {
+export function mapPosition(position: PositionWithChildren): BrokerPositionJson {
   return {
     symbol: position.symbol,
     sector: position.sector,

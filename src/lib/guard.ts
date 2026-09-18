@@ -16,7 +16,7 @@ export function withCors(response: NextResponse, request?: Request): NextRespons
   const origin = request ? resolveOrigin(request) : null;
   if (origin) {
     response.headers.set("Access-Control-Allow-Origin", origin);
-    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
     response.headers.set("Access-Control-Max-Age", "86400");
   }
@@ -49,20 +49,6 @@ export function notFoundResponse(request?: Request): NextResponse {
 
 export function serverErrorResponse(message: string, request?: Request): NextResponse {
   return withCors(NextResponse.json({ error: message }, { status: 500 }), request);
-}
-
-export function requireApiKey(request: Request): NextResponse | null {
-  const expected = process.env.API_KEY?.trim();
-  if (!expected) {
-    return serverErrorResponse("API_KEY is not configured", request);
-  }
-
-  const token = extractBearerToken(request);
-  if (!token || token !== expected) {
-    return unauthorizedResponse(request);
-  }
-
-  return null;
 }
 
 export async function requireAuth(request: Request): Promise<NextResponse | null> {

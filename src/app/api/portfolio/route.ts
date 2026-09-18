@@ -5,7 +5,7 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
-import { createPosition, getPortfolio } from "@/lib/portfolio-service";
+import { getPortfolio, savePortfolio } from "@/lib/portfolio-service";
 import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -46,7 +46,6 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { savePortfolio } = await import("@/lib/portfolio-service");
     const saved = await savePortfolio(body as any);
     return jsonResponse(saved, request);
   } catch (error) {

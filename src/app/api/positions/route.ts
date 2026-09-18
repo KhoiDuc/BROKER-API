@@ -5,7 +5,7 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
-import { createPosition, getPortfolio } from "@/lib/portfolio-service";
+import { createPosition } from "@/lib/portfolio-service";
 import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
