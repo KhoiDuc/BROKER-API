@@ -7,7 +7,7 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
-import { deletePosition, getPosition, updatePosition } from "@/lib/portfolio-service";
+import { deletePosition, getPosition, updatePositionFull } from "@/lib/portfolio-service";
 import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -46,7 +46,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
   }
 
   try {
-    const updated = await updatePosition(symbol, body);
+    const updated = await updatePositionFull(symbol, body);
     return jsonResponse(updated, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

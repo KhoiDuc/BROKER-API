@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { fromBrokerPortfolio, mapDividend, mapLot, mapNote, mapPosition, mapSell, toBrokerPortfolio, type PositionUpsertInput } from "./mapper";
 import type { BrokerPortfolioJson, BrokerPositionJson, BrokerLotJson, BrokerSellJson, BrokerNoteJson, BrokerDividendJson } from "./types";
-import type { PositionStatus, NoteKind, LevelInputMode } from "@prisma/client";
+import type { PositionStatus, NoteKind, LevelInputMode, BuyLot, Sell, Note, Dividend, Position } from "@prisma/client";
 
 const positionInclude = {
   buys: true,
@@ -186,6 +186,108 @@ export async function updatePosition(symbol: string, data: BrokerPositionJson) {
     include: positionInclude,
   });
   return mapPosition(updated);
+}
+
+// Full sync — 1 transaction, replace all children (lots/sells/notes/dividends)
+export async function updatePositionFull(symbol: string, data: BrokerPositionJson) {
+  const sym = normalizeSymbol(symbol);
+  const position = await prisma.position.findUnique({ where: { symbol: sym } });
+  if (!position) throw new Error(`Position ${sym} not found`);
+
+  const input = mapPositionJsonInput(data, position.isArchived);
+
+  // 1 transaction: update position + delete all children + re-create
+  const updated = await prisma.$transaction([
+    prisma.buyLot.deleteMany({ where: { positionId: position.id } }),
+    prisma.sell.deleteMany({ where: { positionId: position.id } }),
+    prisma.note.deleteMany({ where: { positionId: position.id } }),
+    prisma.dividend.deleteMany({ where: { positionId: position.id } }),
+    prisma.position.update({
+      where: { symbol: sym },
+      data: {
+        sector: input.sector,
+        status: input.status,
+        stopLoss: input.stopLoss,
+        stopLossMode: input.stopLossMode,
+        stopLossInput: input.stopLossInput,
+        targetPrice: input.targetPrice,
+        targetPriceMode: input.targetPriceMode,
+        targetPriceInput: input.targetPriceInput,
+        weightPct: input.weightPct,
+        entryLow: input.entryLow,
+        entryHigh: input.entryHigh,
+        recommendationText: input.recommendationText,
+        tags: input.tags,
+        isArchived: input.isArchived,
+        buys: { create: input.buys },
+        sells: { create: input.sells },
+        notes: { create: input.notes },
+        dividends: { create: input.dividends },
+      },
+      include: positionInclude,
+    }),
+  ]);
+
+  return mapPosition(updated[4] as Position & { buys: BuyLot[]; sells: Sell[]; notes: Note[]; dividends: Dividend[] });
+}
+
+// Local helper — reuse mapper logic without isArchived flip
+function mapPositionJsonInput(data: BrokerPositionJson, currentArchived: boolean) {
+  const symbol = normalizeSymbol(data.symbol);
+  return {
+    sector: data.sector?.trim() ?? "",
+    status: (data.status ?? "ChuaQuyet") as PositionStatus,
+    stopLoss: data.stopLoss ?? null,
+    stopLossMode: (data.stopLossMode ?? null) as LevelInputMode | null,
+    stopLossInput: data.stopLossInput ?? null,
+    targetPrice: data.targetPrice ?? null,
+    targetPriceMode: (data.targetPriceMode ?? null) as LevelInputMode | null,
+    targetPriceInput: data.targetPriceInput ?? null,
+    weightPct: data.weightPct ?? null,
+    entryLow: data.entryLow ?? null,
+    entryHigh: data.entryHigh ?? null,
+    recommendationText: data.recommendationText?.trim() ?? null,
+    tags: data.tags ?? [],
+    isArchived: data.status === "DaDong" ? true : currentArchived,
+    buys: (data.buys ?? []).filter((l) => l.price > 0).map((lot) => ({
+      id: ensureId(lot.id, `${symbol.toLowerCase()}b`),
+      boughtAt: parseDate(lot.boughtAt),
+      price: lot.price,
+      quantity: lot.quantity ?? null,
+      stopLoss: lot.stopLoss ?? null,
+      stopLossMode: (lot.stopLossMode ?? null) as LevelInputMode | null,
+      stopLossInput: lot.stopLossInput ?? null,
+      targetPrice: lot.targetPrice ?? null,
+      targetPriceMode: (lot.targetPriceMode ?? null) as LevelInputMode | null,
+      targetPriceInput: lot.targetPriceInput ?? null,
+      note: lot.note?.trim() ?? null,
+      tags: lot.tags ?? [],
+    })),
+    sells: (data.sells ?? []).filter((s) => s.price > 0).map((sell) => ({
+      id: ensureId(sell.id, `${symbol.toLowerCase()}s`),
+      soldAt: parseDate(sell.soldAt),
+      price: sell.price,
+      quantity: sell.quantity ?? null,
+      fee: sell.fee ?? null,
+      tax: sell.tax ?? null,
+      note: sell.note?.trim() ?? null,
+    })),
+    notes: (data.notes ?? []).map((note) => ({
+      id: ensureId(note.id, `${symbol.toLowerCase()}n`),
+      at: parseDate(note.at),
+      kind: (note.kind ?? "Broker") as NoteKind,
+      text: note.text?.trim() ?? "",
+      aiExplain: note.aiExplain?.trim() ?? null,
+    })),
+    dividends: (data.dividends ?? []).map((div) => ({
+      id: ensureId(div.id, `${symbol.toLowerCase()}d`),
+      exDate: parseDate(div.exDate),
+      payDate: div.payDate ? parseDate(div.payDate) : null,
+      amountPerShare: div.amountPerShare,
+      quantity: div.quantity,
+      note: div.note?.trim() ?? null,
+    })),
+  };
 }
 
 export async function deletePosition(symbol: string) {
