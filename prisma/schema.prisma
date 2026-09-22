@@ -102,3 +102,17 @@ model Dividend {
   quantity       Int
   note           String?
 }
+
+/// TCBS OpenAPI session. API key and JWT stay encrypted server-side.
+model TcbsSession {
+  username    String   @id
+  apiKeyEnc   String
+  tokenEnc    String
+  tokenExp    DateTime?
+  custodyCode String   @default("")
+  accountNo   String   @default("")
+  readOnly    Boolean  @default(true)
+  needsReauth Boolean  @default(false)
+  extras      Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+}
