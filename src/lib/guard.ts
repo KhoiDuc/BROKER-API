@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractBearerToken, verifyAccessToken } from "@/lib/auth";
+import { isApiKeyToken } from "@/lib/secrets";
 
 const allowedOrigins: string[] = (process.env.ALLOWED_ORIGINS ?? "")
   .split(",")
@@ -57,8 +58,7 @@ export async function requireAuth(request: Request): Promise<NextResponse | null
     return unauthorizedResponse(request);
   }
 
-  const apiKey = process.env.API_KEY?.trim();
-  if (apiKey && token === apiKey) {
+  if (isApiKeyToken(token)) {
     return null;
   }
 

@@ -1,0 +1,129 @@
+openapi: 3.0.3
+info:
+  title: broker-api
+  version: 0.2.0
+  description: Portfolio CRUD, TCBS OpenAPI proxy, snapshots, alerts, and a server-side Gemini chat proxy.
+servers:
+  - url: /
+paths:
+  /api/health:
+    get:
+      summary: Database health check
+      responses:
+        "200":
+          description: Database is reachable
+  /api/auth/login:
+    post:
+      summary: Exchange username and password for a JWT
+      responses:
+        "200":
+          description: Access token
+        "429":
+          description: Rate limited
+  /api/auth/me:
+    get:
+      summary: Current user
+      security:
+        - bearerAuth: []
+  /api/portfolio:
+    get:
+      summary: Full portfolio
+      security:
+        - bearerAuth: []
+    put:
+      summary: Replace the portfolio in one transaction
+      security:
+        - bearerAuth: []
+  /api/portfolio/export:
+    get:
+      summary: Download the portfolio as CSV
+      security:
+        - bearerAuth: []
+  /api/portfolio/import:
+    post:
+      summary: Preview a CSV diff. dryRun defaults to true and does not write.
+      security:
+        - bearerAuth: []
+  /api/portfolio/snapshots:
+    get:
+      summary: NAV history
+      security:
+        - bearerAuth: []
+    post:
+      summary: Record a snapshot from current lots, sells, and dividends
+      security:
+        - bearerAuth: []
+  /api/positions:
+    post:
+      summary: Create a position
+      security:
+        - bearerAuth: []
+  /api/positions/{symbol}:
+    get:
+      summary: Read one position
+      security:
+        - bearerAuth: []
+    put:
+      summary: Replace a position and its children
+      security:
+        - bearerAuth: []
+    delete:
+      summary: Delete a position
+      security:
+        - bearerAuth: []
+  /api/positions/{symbol}/lots:
+    post:
+      summary: Add a buy lot. The lot id must belong to this symbol.
+      security:
+        - bearerAuth: []
+  /api/positions/{symbol}/lots/{lotId}:
+    put:
+      summary: Update a lot only when it belongs to the symbol
+      security:
+        - bearerAuth: []
+    delete:
+      summary: Delete a lot only when it belongs to the symbol
+      security:
+        - bearerAuth: []
+  /api/alerts:
+    get:
+      summary: List price alerts
+      security:
+        - bearerAuth: []
+    post:
+      summary: Create a price alert
+      security:
+        - bearerAuth: []
+  /api/ai/chat:
+    post:
+      summary: Gemini chat. The API key stays on the server.
+      security:
+        - bearerAuth: []
+  /api/tcbs/connect:
+    post:
+      summary: Store an encrypted TCBS session. Rate limited. API keys are rejected.
+      security:
+        - bearerAuth: []
+  /api/tcbs/refresh:
+    post:
+      summary: Refresh the TCBS JWT with a new OTP, reusing the encrypted API key.
+      security:
+        - bearerAuth: []
+  /api/tcbs/orders:
+    post:
+      summary: Place an order. Requires Idempotency-Key and a confirm token.
+      security:
+        - bearerAuth: []
+  /api/tcbs/ws-ticket:
+    post:
+      summary: Issue a single-use websocket ticket
+      security:
+        - bearerAuth: []
+  /api/tcbs/ws-session/{ticket}:
+    get:
+      summary: Redeem a ticket. Requires x-relay-secret. Returns the upstream URL and token once.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

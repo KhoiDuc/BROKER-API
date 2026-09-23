@@ -1,12 +1,13 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   notFoundResponse,
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { addDividend } from "@/lib/portfolio-service";
+import { dividendSchema } from "@/lib/schemas";
 import type { BrokerDividendJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -21,19 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ sym
   if (authError) return authError;
 
   const { symbol } = await params;
-  let body: BrokerDividendJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
-
-  if (!body?.exDate || body.amountPerShare === undefined) {
-    return badRequestResponse("exDate and amountPerShare are required", request);
-  }
+  const parsed = await parseBody(request, dividendSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const saved = await addDividend(symbol, body);
+    const saved = await addDividend(symbol, parsed.data as BrokerDividendJson);
     return jsonResponse(saved, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

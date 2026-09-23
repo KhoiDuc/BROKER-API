@@ -83,6 +83,28 @@ export async function deleteTcbsSession(username: string) {
   await prisma.tcbsSession.deleteMany({ where: { username } });
 }
 
+export async function rotateToken(username: string, token: string, tokenExp: Date | null) {
+  await prisma.tcbsSession.update({
+    where: { username },
+    data: {
+      tokenEnc: encryptSecret(token),
+      tokenExp,
+      needsReauth: false,
+    },
+  });
+}
+
+export async function loadApiKey(username: string): Promise<string | null> {
+  const row = await prisma.tcbsSession.findUnique({ where: { username } });
+  if (!row?.apiKeyEnc) return null;
+  try {
+    const key = decryptSecret(row.apiKeyEnc);
+    return key.trim() ? key : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function updateSession(
   username: string,
   patch: Partial<Pick<TcbsSessionView, "accountNo" | "readOnly" | "custodyCode" | "needsReauth">> & { extras?: TcbsExtras },

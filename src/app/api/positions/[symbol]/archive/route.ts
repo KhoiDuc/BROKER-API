@@ -1,21 +1,17 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   notFoundResponse,
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { archivePosition } from "@/lib/portfolio-service";
+import { archiveSchema } from "@/lib/schemas";
 import type { PositionStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-type ArchiveBody = {
-  isArchived?: boolean;
-  status?: PositionStatus;
-};
 
 export async function OPTIONS(request: Request) {
   return corsPreflightResponse(request);
@@ -26,19 +22,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sy
   if (authError) return authError;
 
   const { symbol } = await params;
-  let body: ArchiveBody;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
-
-  if (typeof body?.isArchived !== "boolean") {
-    return badRequestResponse("isArchived (boolean) is required", request);
-  }
+  const parsed = await parseBody(request, archiveSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const updated = await archivePosition(symbol, body.isArchived, body.status);
+    const updated = await archivePosition(symbol, parsed.data.isArchived, parsed.data.status as PositionStatus | undefined);
     return jsonResponse(updated, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

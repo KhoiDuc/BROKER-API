@@ -1,5 +1,4 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   noContentResponse,
@@ -7,7 +6,9 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { updateLot, deleteLot } from "@/lib/portfolio-service";
+import { lotSchema } from "@/lib/schemas";
 import type { BrokerLotJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,15 +26,11 @@ export async function PUT(
   if (authError) return authError;
 
   const { symbol, lotId } = await params;
-  let body: BrokerLotJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
+  const parsed = await parseBody(request, lotSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const updated = await updateLot(symbol, lotId, body);
+    const updated = await updateLot(symbol, lotId, parsed.data as BrokerLotJson);
     return jsonResponse(updated, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -58,7 +55,7 @@ export async function DELETE(
     return noContentResponse(request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes("Record to delete does not exist")) {
+    if (msg.includes("not found") || msg.includes("Record to delete does not exist")) {
       return notFoundResponse(request);
     }
     console.error(`[DELETE /api/positions/${symbol}/lots/${lotId}]`, error);

@@ -5,7 +5,9 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { createPosition } from "@/lib/portfolio-service";
+import { positionSchema } from "@/lib/schemas";
 import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,16 +21,9 @@ export async function POST(request: Request) {
   const authError = await requireAuth(request);
   if (authError) return authError;
 
-  let body: BrokerPositionJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
-
-  if (!body?.symbol || body.symbol.trim().length < 3) {
-    return badRequestResponse("Symbol is required (min 3 chars)", request);
-  }
+  const parsed = await parseBody(request, positionSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data as BrokerPositionJson;
 
   try {
     const saved = await createPosition(body);

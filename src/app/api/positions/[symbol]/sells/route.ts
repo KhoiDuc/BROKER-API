@@ -1,12 +1,13 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   notFoundResponse,
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { addSell } from "@/lib/portfolio-service";
+import { sellSchema } from "@/lib/schemas";
 import type { BrokerSellJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -21,19 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ sym
   if (authError) return authError;
 
   const { symbol } = await params;
-  let body: BrokerSellJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
-
-  if (!body?.soldAt || body.price === undefined) {
-    return badRequestResponse("soldAt and price are required", request);
-  }
+  const parsed = await parseBody(request, sellSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const saved = await addSell(symbol, body);
+    const saved = await addSell(symbol, parsed.data as BrokerSellJson);
     return jsonResponse(saved, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

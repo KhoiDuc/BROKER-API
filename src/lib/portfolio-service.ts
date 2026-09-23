@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { fromBrokerPortfolio, mapDividend, mapLot, mapNote, mapPosition, mapSell, toBrokerPortfolio, type PositionUpsertInput } from "./mapper";
+import { ensureId, fromBrokerPortfolio, mapDividend, mapLot, mapNote, mapPosition, mapSell, normalizeSymbol, parseDate, toBrokerPortfolio, toPositionUpsert } from "./mapper";
 import type { BrokerPortfolioJson, BrokerPositionJson, BrokerLotJson, BrokerSellJson, BrokerNoteJson, BrokerDividendJson } from "./types";
 import type { PositionStatus, NoteKind, LevelInputMode, BuyLot, Sell, Note, Dividend, Position } from "@prisma/client";
 
@@ -32,49 +32,50 @@ export async function getPosition(symbol: string) {
 
 export async function savePortfolio(portfolio: BrokerPortfolioJson) {
   const positions = fromBrokerPortfolio(portfolio);
-  console.log(`[portfolio-service] Import ${positions.length} positions — delete-all + create…`);
+  console.log(JSON.stringify({ level: "info", msg: "portfolio-import-start", count: positions.length }));
 
   try {
-    await prisma.$transaction([
-      prisma.buyLot.deleteMany({}),
-      prisma.sell.deleteMany({}),
-      prisma.note.deleteMany({}),
-      prisma.dividend.deleteMany({}),
-      prisma.position.deleteMany({}),
-    ]);
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.buyLot.deleteMany();
+        await tx.sell.deleteMany();
+        await tx.note.deleteMany();
+        await tx.dividend.deleteMany();
+        await tx.position.deleteMany();
 
-    await Promise.all(
-      positions.map((position) =>
-        prisma.position.create({
-          data: {
-            symbol: position.symbol,
-            sector: position.sector,
-            status: position.status,
-            stopLoss: position.stopLoss,
-            stopLossMode: position.stopLossMode,
-            stopLossInput: position.stopLossInput,
-            targetPrice: position.targetPrice,
-            targetPriceMode: position.targetPriceMode,
-            targetPriceInput: position.targetPriceInput,
-            weightPct: position.weightPct,
-            entryLow: position.entryLow,
-            entryHigh: position.entryHigh,
-            recommendationText: position.recommendationText,
-            tags: position.tags,
-            isArchived: position.isArchived,
-            buys: { create: position.buys },
-            sells: { create: position.sells },
-            notes: { create: position.notes },
-            dividends: { create: position.dividends },
-          },
-        }),
-      ),
+        for (const position of positions) {
+          await tx.position.create({
+            data: {
+              symbol: position.symbol,
+              sector: position.sector,
+              status: position.status,
+              stopLoss: position.stopLoss,
+              stopLossMode: position.stopLossMode,
+              stopLossInput: position.stopLossInput,
+              targetPrice: position.targetPrice,
+              targetPriceMode: position.targetPriceMode,
+              targetPriceInput: position.targetPriceInput,
+              weightPct: position.weightPct,
+              entryLow: position.entryLow,
+              entryHigh: position.entryHigh,
+              recommendationText: position.recommendationText,
+              tags: position.tags,
+              isArchived: position.isArchived,
+              buys: { create: position.buys },
+              sells: { create: position.sells },
+              notes: { create: position.notes },
+              dividends: { create: position.dividends },
+            },
+          });
+        }
+      },
+      { timeout: 30_000, maxWait: 10_000 },
     );
 
-    console.log(`[portfolio-service] Import OK — ${positions.length} positions created`);
+    console.log(JSON.stringify({ level: "info", msg: "portfolio-import-ok", count: positions.length }));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error("[portfolio-service] Import FAIL:", msg);
+    console.error(JSON.stringify({ level: "error", msg: "portfolio-import-fail", error: msg }));
     throw new Error(`Import failed: ${msg}`);
   }
 
@@ -83,118 +84,45 @@ export async function savePortfolio(portfolio: BrokerPortfolioJson) {
 
 // ── Position CRUD ──
 
-function parseDate(value: string): Date {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid date: ${value}`);
-  }
-  return date;
-}
-
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
-
-function ensureId(id: string | undefined, prefix: string): string {
-  if (id && id.trim()) return id.trim();
-  return `${prefix}${Math.random().toString(36).slice(2, 10)}`;
+function positionCreateData(input: ReturnType<typeof toPositionUpsert>) {
+  return {
+    symbol: input.symbol,
+    sector: input.sector,
+    status: input.status,
+    stopLoss: input.stopLoss,
+    stopLossMode: input.stopLossMode,
+    stopLossInput: input.stopLossInput,
+    targetPrice: input.targetPrice,
+    targetPriceMode: input.targetPriceMode,
+    targetPriceInput: input.targetPriceInput,
+    weightPct: input.weightPct,
+    entryLow: input.entryLow,
+    entryHigh: input.entryHigh,
+    recommendationText: input.recommendationText,
+    tags: input.tags,
+    isArchived: input.isArchived,
+    buys: { create: input.buys },
+    sells: { create: input.sells },
+    notes: { create: input.notes },
+    dividends: { create: input.dividends },
+  };
 }
 
 export async function createPosition(data: BrokerPositionJson) {
-  const symbol = normalizeSymbol(data.symbol);
+  const input = toPositionUpsert(data, data.status === "DaDong");
   const created = await prisma.position.create({
-    data: {
-      symbol,
-      sector: data.sector?.trim() ?? "",
-      status: (data.status ?? "ChuaQuyet") as PositionStatus,
-      stopLoss: data.stopLoss ?? null,
-      stopLossMode: (data.stopLossMode ?? null) as LevelInputMode | null,
-      stopLossInput: data.stopLossInput ?? null,
-      targetPrice: data.targetPrice ?? null,
-      targetPriceMode: (data.targetPriceMode ?? null) as LevelInputMode | null,
-      targetPriceInput: data.targetPriceInput ?? null,
-      weightPct: data.weightPct ?? null,
-      entryLow: data.entryLow ?? null,
-      entryHigh: data.entryHigh ?? null,
-      recommendationText: data.recommendationText?.trim() ?? null,
-      tags: data.tags ?? [],
-      isArchived: false,
-      buys: { create: (data.buys ?? []).filter(l => l.price > 0).map(lot => ({
-        id: ensureId(lot.id, `${symbol.toLowerCase()}b`),
-        boughtAt: parseDate(lot.boughtAt),
-        price: lot.price,
-        quantity: lot.quantity ?? null,
-        stopLoss: lot.stopLoss ?? null,
-        stopLossMode: (lot.stopLossMode ?? null) as LevelInputMode | null,
-        stopLossInput: lot.stopLossInput ?? null,
-        targetPrice: lot.targetPrice ?? null,
-        targetPriceMode: (lot.targetPriceMode ?? null) as LevelInputMode | null,
-        targetPriceInput: lot.targetPriceInput ?? null,
-        note: lot.note?.trim() ?? null,
-        tags: lot.tags ?? [],
-      }))},
-      sells: { create: (data.sells ?? []).filter(s => s.price > 0).map(sell => ({
-        id: ensureId(sell.id, `${symbol.toLowerCase()}s`),
-        soldAt: parseDate(sell.soldAt),
-        price: sell.price,
-        quantity: sell.quantity ?? null,
-        fee: sell.fee ?? null,
-        tax: sell.tax ?? null,
-        note: sell.note?.trim() ?? null,
-      }))},
-      notes: { create: (data.notes ?? []).map(note => ({
-        id: ensureId(note.id, `${symbol.toLowerCase()}n`),
-        at: parseDate(note.at),
-        kind: (note.kind ?? "Broker") as NoteKind,
-        text: note.text?.trim() ?? "",
-        aiExplain: note.aiExplain?.trim() ?? null,
-      }))},
-      dividends: { create: (data.dividends ?? []).map(div => ({
-        id: ensureId(div.id, `${symbol.toLowerCase()}d`),
-        exDate: parseDate(div.exDate),
-        payDate: div.payDate ? parseDate(div.payDate) : null,
-        amountPerShare: div.amountPerShare,
-        quantity: div.quantity,
-        note: div.note?.trim() ?? null,
-      }))},
-    },
+    data: positionCreateData(input),
     include: positionInclude,
   });
   return mapPosition(created);
 }
 
-export async function updatePosition(symbol: string, data: BrokerPositionJson) {
-  const sym = normalizeSymbol(symbol);
-  const updated = await prisma.position.update({
-    where: { symbol: sym },
-    data: {
-      sector: data.sector?.trim() ?? "",
-      status: (data.status ?? "ChuaQuyet") as PositionStatus,
-      stopLoss: data.stopLoss ?? null,
-      stopLossMode: (data.stopLossMode ?? null) as LevelInputMode | null,
-      stopLossInput: data.stopLossInput ?? null,
-      targetPrice: data.targetPrice ?? null,
-      targetPriceMode: (data.targetPriceMode ?? null) as LevelInputMode | null,
-      targetPriceInput: data.targetPriceInput ?? null,
-      weightPct: data.weightPct ?? null,
-      entryLow: data.entryLow ?? null,
-      entryHigh: data.entryHigh ?? null,
-      recommendationText: data.recommendationText?.trim() ?? null,
-      tags: data.tags ?? [],
-      isArchived: data.status === "DaDong" ? true : (data.status ? false : undefined),
-    },
-    include: positionInclude,
-  });
-  return mapPosition(updated);
-}
-
-// Full sync — 1 transaction, replace all children (lots/sells/notes/dividends)
 export async function updatePositionFull(symbol: string, data: BrokerPositionJson) {
   const sym = normalizeSymbol(symbol);
   const position = await prisma.position.findUnique({ where: { symbol: sym } });
   if (!position) throw new Error(`Position ${sym} not found`);
 
-  const input = mapPositionJsonInput(data, position.isArchived);
+  const input = toPositionUpsert({ ...data, symbol: sym }, data.status === "DaDong" ? true : position.isArchived);
 
   // 1 transaction: update position + delete all children + re-create
   const updated = await prisma.$transaction([
@@ -229,65 +157,6 @@ export async function updatePositionFull(symbol: string, data: BrokerPositionJso
   ]);
 
   return mapPosition(updated[4] as Position & { buys: BuyLot[]; sells: Sell[]; notes: Note[]; dividends: Dividend[] });
-}
-
-// Local helper — reuse mapper logic without isArchived flip
-function mapPositionJsonInput(data: BrokerPositionJson, currentArchived: boolean) {
-  const symbol = normalizeSymbol(data.symbol);
-  return {
-    sector: data.sector?.trim() ?? "",
-    status: (data.status ?? "ChuaQuyet") as PositionStatus,
-    stopLoss: data.stopLoss ?? null,
-    stopLossMode: (data.stopLossMode ?? null) as LevelInputMode | null,
-    stopLossInput: data.stopLossInput ?? null,
-    targetPrice: data.targetPrice ?? null,
-    targetPriceMode: (data.targetPriceMode ?? null) as LevelInputMode | null,
-    targetPriceInput: data.targetPriceInput ?? null,
-    weightPct: data.weightPct ?? null,
-    entryLow: data.entryLow ?? null,
-    entryHigh: data.entryHigh ?? null,
-    recommendationText: data.recommendationText?.trim() ?? null,
-    tags: data.tags ?? [],
-    isArchived: data.status === "DaDong" ? true : currentArchived,
-    buys: (data.buys ?? []).filter((l) => l.price > 0).map((lot) => ({
-      id: ensureId(lot.id, `${symbol.toLowerCase()}b`),
-      boughtAt: parseDate(lot.boughtAt),
-      price: lot.price,
-      quantity: lot.quantity ?? null,
-      stopLoss: lot.stopLoss ?? null,
-      stopLossMode: (lot.stopLossMode ?? null) as LevelInputMode | null,
-      stopLossInput: lot.stopLossInput ?? null,
-      targetPrice: lot.targetPrice ?? null,
-      targetPriceMode: (lot.targetPriceMode ?? null) as LevelInputMode | null,
-      targetPriceInput: lot.targetPriceInput ?? null,
-      note: lot.note?.trim() ?? null,
-      tags: lot.tags ?? [],
-    })),
-    sells: (data.sells ?? []).filter((s) => s.price > 0).map((sell) => ({
-      id: ensureId(sell.id, `${symbol.toLowerCase()}s`),
-      soldAt: parseDate(sell.soldAt),
-      price: sell.price,
-      quantity: sell.quantity ?? null,
-      fee: sell.fee ?? null,
-      tax: sell.tax ?? null,
-      note: sell.note?.trim() ?? null,
-    })),
-    notes: (data.notes ?? []).map((note) => ({
-      id: ensureId(note.id, `${symbol.toLowerCase()}n`),
-      at: parseDate(note.at),
-      kind: (note.kind ?? "Broker") as NoteKind,
-      text: note.text?.trim() ?? "",
-      aiExplain: note.aiExplain?.trim() ?? null,
-    })),
-    dividends: (data.dividends ?? []).map((div) => ({
-      id: ensureId(div.id, `${symbol.toLowerCase()}d`),
-      exDate: parseDate(div.exDate),
-      payDate: div.payDate ? parseDate(div.payDate) : null,
-      amountPerShare: div.amountPerShare,
-      quantity: div.quantity,
-      note: div.note?.trim() ?? null,
-    })),
-  };
 }
 
 export async function deletePosition(symbol: string) {
@@ -340,12 +209,9 @@ export async function addLot(symbol: string, data: BrokerLotJson) {
 }
 
 export async function updateLot(symbol: string, lotId: string, data: BrokerLotJson) {
-  const sym = normalizeSymbol(symbol);
-  const position = await prisma.position.findUnique({ where: { symbol: sym } });
-  if (!position) throw new Error(`Position ${sym} not found`);
-
-  const updated = await prisma.buyLot.update({
-    where: { id: lotId },
+  const position = await requirePosition(symbol);
+  const result = await prisma.buyLot.updateMany({
+    where: { id: lotId, positionId: position.id },
     data: {
       boughtAt: parseDate(data.boughtAt),
       price: data.price,
@@ -360,11 +226,16 @@ export async function updateLot(symbol: string, lotId: string, data: BrokerLotJs
       tags: data.tags ?? [],
     },
   });
+  if (result.count === 0) throw new Error(`Lot ${lotId} not found`);
+  const updated = await prisma.buyLot.findUnique({ where: { id: lotId } });
+  if (!updated) throw new Error(`Lot ${lotId} not found`);
   return mapLot(updated);
 }
 
 export async function deleteLot(symbol: string, lotId: string) {
-  await prisma.buyLot.delete({ where: { id: lotId } });
+  const position = await requirePosition(symbol);
+  const result = await prisma.buyLot.deleteMany({ where: { id: lotId, positionId: position.id } });
+  if (result.count === 0) throw new Error(`Lot ${lotId} not found`);
 }
 
 // ── Sell CRUD ──
@@ -390,8 +261,9 @@ export async function addSell(symbol: string, data: BrokerSellJson) {
 }
 
 export async function updateSell(symbol: string, sellId: string, data: BrokerSellJson) {
-  const updated = await prisma.sell.update({
-    where: { id: sellId },
+  const position = await requirePosition(symbol);
+  const result = await prisma.sell.updateMany({
+    where: { id: sellId, positionId: position.id },
     data: {
       soldAt: parseDate(data.soldAt),
       price: data.price,
@@ -401,11 +273,16 @@ export async function updateSell(symbol: string, sellId: string, data: BrokerSel
       note: data.note?.trim() ?? null,
     },
   });
+  if (result.count === 0) throw new Error(`Sell ${sellId} not found`);
+  const updated = await prisma.sell.findUnique({ where: { id: sellId } });
+  if (!updated) throw new Error(`Sell ${sellId} not found`);
   return mapSell(updated);
 }
 
 export async function deleteSell(symbol: string, sellId: string) {
-  await prisma.sell.delete({ where: { id: sellId } });
+  const position = await requirePosition(symbol);
+  const result = await prisma.sell.deleteMany({ where: { id: sellId, positionId: position.id } });
+  if (result.count === 0) throw new Error(`Sell ${sellId} not found`);
 }
 
 // ── Note CRUD ──
@@ -429,8 +306,9 @@ export async function addNote(symbol: string, data: BrokerNoteJson) {
 }
 
 export async function updateNote(symbol: string, noteId: string, data: BrokerNoteJson) {
-  const updated = await prisma.note.update({
-    where: { id: noteId },
+  const position = await requirePosition(symbol);
+  const result = await prisma.note.updateMany({
+    where: { id: noteId, positionId: position.id },
     data: {
       at: parseDate(data.at),
       kind: (data.kind ?? "Broker") as NoteKind,
@@ -438,11 +316,16 @@ export async function updateNote(symbol: string, noteId: string, data: BrokerNot
       aiExplain: data.aiExplain?.trim() ?? null,
     },
   });
+  if (result.count === 0) throw new Error(`Note ${noteId} not found`);
+  const updated = await prisma.note.findUnique({ where: { id: noteId } });
+  if (!updated) throw new Error(`Note ${noteId} not found`);
   return mapNote(updated);
 }
 
 export async function deleteNote(symbol: string, noteId: string) {
-  await prisma.note.delete({ where: { id: noteId } });
+  const position = await requirePosition(symbol);
+  const result = await prisma.note.deleteMany({ where: { id: noteId, positionId: position.id } });
+  if (result.count === 0) throw new Error(`Note ${noteId} not found`);
 }
 
 // ── Dividend CRUD ──
@@ -467,8 +350,9 @@ export async function addDividend(symbol: string, data: BrokerDividendJson) {
 }
 
 export async function updateDividend(symbol: string, dividendId: string, data: BrokerDividendJson) {
-  const updated = await prisma.dividend.update({
-    where: { id: dividendId },
+  const position = await requirePosition(symbol);
+  const result = await prisma.dividend.updateMany({
+    where: { id: dividendId, positionId: position.id },
     data: {
       exDate: parseDate(data.exDate),
       payDate: data.payDate ? parseDate(data.payDate) : null,
@@ -477,9 +361,21 @@ export async function updateDividend(symbol: string, dividendId: string, data: B
       note: data.note?.trim() ?? null,
     },
   });
+  if (result.count === 0) throw new Error(`Dividend ${dividendId} not found`);
+  const updated = await prisma.dividend.findUnique({ where: { id: dividendId } });
+  if (!updated) throw new Error(`Dividend ${dividendId} not found`);
   return mapDividend(updated);
 }
 
 export async function deleteDividend(symbol: string, dividendId: string) {
-  await prisma.dividend.delete({ where: { id: dividendId } });
+  const position = await requirePosition(symbol);
+  const result = await prisma.dividend.deleteMany({ where: { id: dividendId, positionId: position.id } });
+  if (result.count === 0) throw new Error(`Dividend ${dividendId} not found`);
+}
+
+async function requirePosition(symbol: string) {
+  const sym = normalizeSymbol(symbol);
+  const position = await prisma.position.findUnique({ where: { symbol: sym } });
+  if (!position) throw new Error(`Position ${sym} not found`);
+  return position;
 }

@@ -1,4 +1,5 @@
 import { extractBearerToken, verifyAccessToken } from "@/lib/auth";
+import { claimIdempotency, completeIdempotency, releaseIdempotency } from "@/lib/idempotency";
 import {
   badRequestResponse,
   corsPreflightResponse,
@@ -6,19 +7,23 @@ import {
   serverErrorResponse,
   unauthorizedResponse,
 } from "@/lib/guard";
+import { allowRequest, clientIp } from "@/lib/rate-limit";
+import { isApiKeyToken, secretsEqual } from "@/lib/secrets";
 import { randomId } from "@/lib/tcbs/crypto";
 import { TcbsReauth, exchangeToken, readJwtCustody, readJwtExp, tcbsFetch, wsUpstream } from "@/lib/tcbs/client";
 import { estimateCost, isDerivativeAccount, orderHash, validateEquityOrder, type EquityOrder } from "@/lib/tcbs/orderGuard";
 import {
   deleteTcbsSession,
+  loadApiKey,
   loadSession,
   markReauth,
   pushAudit,
+  rotateToken,
   saveConnected,
   updateSession,
-  type TcbsExtras,
   type TcbsSessionView,
 } from "@/lib/tcbs/session";
+import { issueWsTicket, redeemWsTicket } from "@/lib/tcbs/tickets";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -32,8 +37,7 @@ export async function OPTIONS(request: Request) {
 async function usernameOf(request: Request): Promise<string | Response> {
   const token = extractBearerToken(request);
   if (!token) return unauthorizedResponse(request);
-  const apiKey = process.env.API_KEY?.trim();
-  if (apiKey && token === apiKey) return "api-key";
+  if (isApiKeyToken(token)) return "api-key";
   const payload = await verifyAccessToken(token);
   if (!payload) return unauthorizedResponse(request);
   return payload.username;
@@ -154,8 +158,22 @@ async function dispatch(request: Request, ctx: Ctx, method: string) {
   const user = await usernameOf(request);
   if (user instanceof Response) return user;
 
+  const tradingWrite =
+    method !== "GET" &&
+    (path === "connect" ||
+      path === "disconnect" ||
+      path === "refresh" ||
+      path === "trading-mode" ||
+      path === "orders" ||
+      path.startsWith("orders/") ||
+      path === "ws-ticket");
+  if (user === "api-key" && tradingWrite) {
+    return jsonResponse({ error: "API key cannot call TCBS trading routes" }, request, { status: 403 });
+  }
+
   try {
     if (method === "POST" && path === "connect") return connect(request, user);
+    if (method === "POST" && path === "refresh") return refreshToken(request, user);
     if (method === "GET" && path === "status") return status(request, user);
     if (method === "POST" && path === "disconnect") return disconnect(request, user);
     if (method === "POST" && path === "trading-mode") return tradingMode(request, user);
@@ -317,7 +335,7 @@ async function dispatch(request: Request, ctx: Ctx, method: string) {
     if (method === "POST" && path === "orders") return placeOrder(request, user, session);
     if (method === "PUT" && slug[0] === "orders" && slug[1] && slug[2] === "cancel") return cancelOrder(request, user, session, slug[1]);
     if (method === "PUT" && slug[0] === "orders" && slug[1] && slug.length === 2) return amendOrder(request, user, session, slug[1]);
-    if (method === "POST" && path === "ws-ticket") return issueTicket(request, user, session);
+    if (method === "POST" && path === "ws-ticket") return issueTicket(request, user);
 
     return jsonResponse({ error: "Not found" }, request, { status: 404 });
   } catch (error) {
@@ -328,6 +346,8 @@ async function dispatch(request: Request, ctx: Ctx, method: string) {
 }
 
 async function connect(request: Request, username: string) {
+  const allowed = await allowRequest(`tcbs-connect:${clientIp(request)}`, 8, 15 * 60 * 1000).catch(() => true);
+  if (!allowed) return jsonResponse({ error: "Too many connect attempts" }, request, { status: 429 });
   const body = await readBody(request);
   const apiKey = String(body.apiKey ?? "").trim();
   const otp = String(body.otp ?? "").trim();
@@ -373,6 +393,29 @@ async function status(request: Request, username: string) {
     },
     request,
   );
+}
+
+async function refreshToken(request: Request, username: string) {
+  const session = await loadSession(username);
+  if (session && !session.needsReauth && session.token && session.tokenExp && session.tokenExp.getTime() > Date.now() + 60_000) {
+    return jsonResponse({ connected: true, refreshed: false, custodyCode: session.custodyCode, accountNo: session.accountNo, readOnly: session.readOnly }, request);
+  }
+  const apiKey = await loadApiKey(username);
+  if (!apiKey) return reauth(request);
+  const body = await readBody(request);
+  const otp = String(body.otp ?? "").trim();
+  if (!otp) {
+    return badRequestResponse("TCBS yêu cầu iOTP mới. Gửi { otp } — API key đã lưu mã hoá trên server.", request);
+  }
+  try {
+    const token = await exchangeToken(apiKey, otp);
+    await rotateToken(username, token, readJwtExp(token));
+    return jsonResponse({ connected: true, refreshed: true }, request);
+  } catch (error) {
+    if (error instanceof TcbsReauth) return reauth(request);
+    const message = error instanceof Error ? error.message : "Refresh failed";
+    return badRequestResponse(message, request);
+  }
 }
 
 async function disconnect(request: Request, username: string) {
@@ -433,16 +476,26 @@ async function placeOrder(request: Request, username: string, session: TcbsSessi
   if (session.readOnly) return jsonResponse({ error: "READ_ONLY", message: "Đang ở chế độ chỉ đọc." }, request, { status: 403 });
   const idem = request.headers.get("idempotency-key")?.trim();
   if (!idem) return badRequestResponse("Thiếu header Idempotency-Key.", request);
-  const cached = session.extras.idempotency?.[idem];
-  if (cached) return jsonResponse(cached.body, request);
+  const claim = await claimIdempotency(username, idem);
+  if (claim.status === "replay") return jsonResponse(claim.body, request);
+  if (claim.status === "pending") return jsonResponse({ error: "IDEMPOTENT_IN_PROGRESS" }, request, { status: 409 });
 
   const body = await readBody(request);
   const confirmToken = String(body.confirmToken ?? "");
   const pending = session.extras.confirms?.[confirmToken];
-  if (!pending || pending.exp < Date.now()) return badRequestResponse("confirmToken hết hạn. Xem lại lệnh trước khi gửi.", request);
+  if (!pending || pending.exp < Date.now()) {
+    await releaseIdempotency(username, idem);
+    return badRequestResponse("confirmToken hết hạn. Xem lại lệnh trước khi gửi.", request);
+  }
   const checked = validateEquityOrder({ ...body, accountNo: pending.order.accountNo, exchange: pending.order.exchange });
-  if (!checked.ok) return badRequestResponse(checked.error, request);
-  if (orderHash(checked.order) !== pending.hash) return badRequestResponse("Lệnh đã đổi so với bản xác nhận.", request);
+  if (!checked.ok) {
+    await releaseIdempotency(username, idem);
+    return badRequestResponse(checked.error, request);
+  }
+  if (orderHash(checked.order) !== pending.hash) {
+    await releaseIdempotency(username, idem);
+    return badRequestResponse("Lệnh đã đổi so với bản xác nhận.", request);
+  }
 
   const confirms = { ...session.extras.confirms };
   delete confirms[confirmToken];
@@ -456,11 +509,12 @@ async function placeOrder(request: Request, username: string, session: TcbsSessi
         quantity: pending.order.quantity,
       },
     });
-    const idempotency = pruneIdempotency({ ...(session.extras.idempotency ?? {}), [idem]: { at: Date.now(), body: result } });
-    const extras = pushAudit({ ...session.extras, confirms, idempotency }, "place", `${pending.order.execType} ${pending.order.symbol} ${pending.order.quantity}@${pending.order.priceVnd}`);
+    const extras = pushAudit({ ...session.extras, confirms }, "place", `${pending.order.execType} ${pending.order.symbol} ${pending.order.quantity}@${pending.order.priceVnd}`);
     await updateSession(username, { extras });
+    await completeIdempotency(username, idem, result);
     return jsonResponse(result, request);
   } catch (error) {
+    await releaseIdempotency(username, idem);
     if (error instanceof TcbsReauth) {
       await markReauth(username);
       return reauth(request);
@@ -519,25 +573,18 @@ async function cancelOrder(request: Request, username: string, session: TcbsSess
   }
 }
 
-async function issueTicket(request: Request, username: string, session: TcbsSessionView) {
+async function issueTicket(request: Request, username: string) {
   const body = await readBody(request);
   const stream = String(body.stream ?? "normal");
   if (!wsUpstream(stream)) return badRequestResponse("stream phải là normal, orders hoặc flow.", request);
   const symbol = String(body.symbol ?? "").trim().toUpperCase();
-  const ticket = randomId();
-  const tickets = { ...(session.extras.tickets ?? {}) };
-  const now = Date.now();
-  for (const [key, value] of Object.entries(tickets)) {
-    if (value.exp < now) delete tickets[key];
-  }
-  tickets[ticket] = { stream, symbol, exp: now + 60_000 };
-  await updateSession(username, { extras: { ...session.extras, tickets } });
+  const issued = await issueWsTicket(username, stream, symbol);
   return jsonResponse(
     {
-      ticket,
+      ticket: issued.ticket,
       stream,
       symbol,
-      expiresInSec: 60,
+      expiresInSec: issued.expiresInSec,
       relayUrl: process.env.TCBS_RELAY_URL || "",
     },
     request,
@@ -546,28 +593,12 @@ async function issueTicket(request: Request, username: string, session: TcbsSess
 
 async function redeemTicket(request: Request, ticket: string) {
   const secret = process.env.TCBS_RELAY_SECRET?.trim();
-  if (!secret || request.headers.get("x-relay-secret") !== secret) return unauthorizedResponse(request);
-  const rows = await import("@/lib/prisma").then((m) => m.prisma.tcbsSession.findMany());
-  for (const row of rows) {
-    const extras = (row.extras ?? {}) as TcbsExtras;
-    const hit = extras.tickets?.[ticket];
-    if (!hit || hit.exp < Date.now()) continue;
-    const session = await loadSession(row.username);
-    if (!session?.token) continue;
-    const url = wsUpstream(hit.stream);
-    const tickets = { ...extras.tickets };
-    delete tickets[ticket];
-    await updateSession(row.username, { extras: { ...extras, tickets } });
-    return jsonResponse({ url, token: session.token, symbol: hit.symbol, stream: hit.stream }, request);
-  }
-  return jsonResponse({ error: "ticket expired" }, request, { status: 404 });
-}
-
-function pruneIdempotency(map: Record<string, { at: number; body: unknown }>) {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  const next: typeof map = {};
-  for (const [key, value] of Object.entries(map)) {
-    if (value.at >= cutoff) next[key] = value;
-  }
-  return next;
+  const presented = request.headers.get("x-relay-secret")?.trim() ?? "";
+  if (!secret || !presented || !secretsEqual(presented, secret)) return unauthorizedResponse(request);
+  const row = await redeemWsTicket(ticket);
+  if (!row) return jsonResponse({ error: "ticket expired" }, request, { status: 404 });
+  const session = await loadSession(row.username);
+  if (!session?.token) return jsonResponse({ error: "ticket expired" }, request, { status: 404 });
+  const url = wsUpstream(row.stream);
+  return jsonResponse({ url, token: session.token, symbol: row.symbol, stream: row.stream }, request);
 }

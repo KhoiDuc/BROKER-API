@@ -6,6 +6,8 @@ import {
   unauthorizedResponse,
 } from "@/lib/guard";
 import { signAccessToken, validateTradingCredentials } from "@/lib/auth";
+import { log, requestId } from "@/lib/log";
+import { allowRequest, clientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -20,6 +22,15 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const reqId = requestId(request);
+  const allowed = await allowRequest(`login:${clientIp(request)}`, 10, 15 * 60 * 1000).catch((error) => {
+    log("error", "login-rate-limit", { reqId, error: error instanceof Error ? error.message : String(error) });
+    return true;
+  });
+  if (!allowed) {
+    return jsonResponse({ error: "Too many login attempts" }, request, { status: 429 });
+  }
+
   let body: LoginBody;
   try {
     body = await request.json();
@@ -55,7 +66,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Login failed";
-    console.error("[POST /api/auth/login]", error);
+    log("error", "login-failed", { reqId, error: message });
     return serverErrorResponse(message, request);
   }
 }

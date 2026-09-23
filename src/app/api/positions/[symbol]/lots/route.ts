@@ -1,12 +1,13 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   notFoundResponse,
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { addLot } from "@/lib/portfolio-service";
+import { lotSchema } from "@/lib/schemas";
 import type { BrokerLotJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -21,19 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ sym
   if (authError) return authError;
 
   const { symbol } = await params;
-  let body: BrokerLotJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
-
-  if (!body?.boughtAt || body.price === undefined) {
-    return badRequestResponse("boughtAt and price are required", request);
-  }
+  const parsed = await parseBody(request, lotSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const saved = await addLot(symbol, body);
+    const saved = await addLot(symbol, parsed.data as BrokerLotJson);
     return jsonResponse(saved, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

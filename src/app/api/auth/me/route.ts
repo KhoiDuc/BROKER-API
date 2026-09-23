@@ -5,6 +5,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/guard";
 import { extractBearerToken, verifyAccessToken } from "@/lib/auth";
+import { isApiKeyToken } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -17,6 +18,10 @@ export async function GET(request: Request) {
   const token = extractBearerToken(request);
   if (!token) {
     return unauthorizedResponse(request);
+  }
+
+  if (isApiKeyToken(token)) {
+    return jsonResponse({ username: "api-key" }, request);
   }
 
   try {

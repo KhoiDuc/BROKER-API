@@ -58,6 +58,43 @@ npm run dev
 | POST/PUT/DELETE | `/api/positions/{symbol}/notes/...` | Bearer JWT or `API_KEY` | Note CRUD |
 | POST/PUT/DELETE | `/api/positions/{symbol}/dividends/...` | Bearer JWT or `API_KEY` | Dividend CRUD |
 | OPTIONS | `*` | No | CORS preflight |
+| GET | `/api/health` | No | Database ping |
+| GET | `/api/portfolio/export` | Bearer JWT or read-only `API_KEY` | CSV download |
+| POST | `/api/portfolio/import?dryRun=true` | Bearer JWT or `API_KEY` | CSV diff preview (does not write) |
+| GET/POST | `/api/portfolio/snapshots` | Bearer JWT or `API_KEY` | NAV history / record a snapshot |
+| GET/POST | `/api/alerts` | Bearer JWT or `API_KEY` | Price alerts |
+| DELETE | `/api/alerts/{id}` | Bearer JWT or `API_KEY` | Remove an alert |
+| POST | `/api/ai/chat` | Bearer JWT or `API_KEY` | Gemini proxy (`GEMINI_API_KEY` stays on the server) |
+| POST | `/api/tcbs/connect` | Bearer JWT | Exchange TCBS API key + OTP. Rate limited. `API_KEY` is rejected. |
+| POST | `/api/tcbs/refresh` | Bearer JWT | New OTP only; the encrypted API key is reused. TCBS does not issue a silent refresh. |
+| GET | `/api/tcbs/status` | Bearer JWT or `API_KEY` | Connection status |
+| POST | `/api/tcbs/orders/preview` | Bearer JWT | Confirm token for an equity order |
+| POST | `/api/tcbs/orders` | Bearer JWT | Place order. Requires `Idempotency-Key`. `API_KEY` is rejected. |
+| PUT | `/api/tcbs/orders/{id}` | Bearer JWT | Amend. `API_KEY` is rejected. |
+| PUT | `/api/tcbs/orders/{id}/cancel` | Bearer JWT | Cancel. `API_KEY` is rejected. |
+| POST | `/api/tcbs/ws-ticket` | Bearer JWT | Single-use websocket ticket |
+| GET | `/api/tcbs/ws-session/{ticket}` | `x-relay-secret` | Redeem ticket once. Returns the upstream URL and token. |
+| GET | `/api/tcbs/audit` | Bearer JWT or `API_KEY` | Recent trading actions |
+| GET | `/api/cron/snapshots` | `CRON_SECRET` | Daily NAV snapshot |
+| GET | `/api/cron/alerts` | `CRON_SECRET` | Fire Discord/Telegram alerts |
+
+`API_KEY` is read for portfolio data and rejected on TCBS trading routes (`connect`, `refresh`, orders, `ws-ticket`, `trading-mode`, `disconnect`).
+
+Child lot/sell/note/dividend updates match both the id and the position symbol. A mismatched id returns 404.
+
+Portfolio import deletes and recreates rows inside one interactive transaction.
+
+### Duplicate migration
+
+`prisma/migrations/0_init` duplicated `20250914100000_init` and has been removed. If production already recorded `0_init`, mark it rolled back without dropping tables, then mark the timestamped init as applied if it is not already:
+
+```powershell
+npx prisma migrate resolve --rolled-back 0_init
+npx prisma migrate resolve --applied 20250914100000_init
+npx prisma migrate deploy
+```
+
+Set `ALLOWED_ORIGINS` on Vercel to the GitHub Pages origin (for example `https://khoinguyenminhduc.github.io`) plus localhost. The websocket relay lives in `cloudflare/tcbs-ws-relay.js`.
 
 All mutation responses return mapped JSON DTOs (numbers as numbers, not Prisma Decimal strings).
 

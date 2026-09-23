@@ -1,5 +1,4 @@
 import {
-  badRequestResponse,
   corsPreflightResponse,
   jsonResponse,
   noContentResponse,
@@ -7,7 +6,9 @@ import {
   requireAuth,
   serverErrorResponse,
 } from "@/lib/guard";
+import { parseBody } from "@/lib/parse-body";
 import { deletePosition, getPosition, updatePositionFull } from "@/lib/portfolio-service";
+import { positionSchema } from "@/lib/schemas";
 import type { BrokerPositionJson } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,19 +39,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ symb
   if (authError) return authError;
 
   const { symbol } = await params;
-  let body: BrokerPositionJson;
-  try {
-    body = await request.json();
-  } catch {
-    return badRequestResponse("Invalid JSON body", request);
-  }
+  const parsed = await parseBody(request, positionSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const updated = await updatePositionFull(symbol, body);
+    const updated = await updatePositionFull(symbol, { ...parsed.data, symbol } as BrokerPositionJson);
     return jsonResponse(updated, request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes("Record to update not found")) {
+    if (msg.includes("not found") || msg.includes("Record to update not found")) {
       return notFoundResponse(request);
     }
     console.error(`[PUT /api/positions/${symbol}]`, error);
@@ -68,7 +65,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ s
     return noContentResponse(request);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes("Record to delete does not exist")) {
+    if (msg.includes("not found") || msg.includes("Record to delete does not exist")) {
       return notFoundResponse(request);
     }
     console.error(`[DELETE /api/positions/${symbol}]`, error);

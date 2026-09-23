@@ -116,3 +116,59 @@ model TcbsSession {
   extras      Json     @default("{}")
   updatedAt   DateTime @updatedAt
 }
+
+/// Single-use TCBS websocket ticket. Looked up by primary key, not by scanning sessions.
+model WsTicket {
+  id        String    @id
+  username  String
+  stream    String
+  symbol    String    @default("")
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int
+  windowEnd DateTime
+}
+
+model OrderIdempotency {
+  id        String   @id @default(uuid())
+  username  String
+  key       String
+  pending   Boolean  @default(true)
+  body      Json?
+  createdAt DateTime @default(now())
+
+  @@unique([username, key])
+}
+
+model PortfolioSnapshot {
+  id              String   @id @default(uuid())
+  takenAt         DateTime @default(now())
+  nav             Decimal  @db.Decimal(18, 4)
+  realizedPnl     Decimal  @db.Decimal(18, 4)
+  unrealizedPnl   Decimal? @db.Decimal(18, 4)
+  dividendIncome  Decimal  @db.Decimal(18, 4)
+  breakdown       Json
+  createdAt       DateTime @default(now())
+
+  @@index([takenAt])
+}
+
+model PriceAlert {
+  id          String    @id @default(uuid())
+  symbol      String
+  direction   String
+  price       Decimal   @db.Decimal(18, 4)
+  channel     String    @default("discord")
+  active      Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([symbol])
+}

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   BuyLot,
   Dividend,
@@ -128,7 +129,7 @@ export function toBrokerPortfolio(rows: PositionWithChildren[]): BrokerPortfolio
   };
 }
 
-function parseDate(value: string): Date {
+export function parseDate(value: string): Date {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new Error(`Invalid date: ${value}`);
@@ -136,13 +137,13 @@ function parseDate(value: string): Date {
   return date;
 }
 
-function normalizeSymbol(symbol: string): string {
+export function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
 }
 
-function ensureId(id: string | undefined, prefix: string): string {
+export function ensureId(id: string | undefined, prefix: string): string {
   if (id && id.trim()) return id.trim();
-  return `${prefix}${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${randomUUID()}`;
 }
 
 export type PositionUpsertInput = {
@@ -203,15 +204,15 @@ export type PositionUpsertInput = {
 
 export function fromBrokerPortfolio(portfolio: BrokerPortfolioJson): PositionUpsertInput[] {
   const open = (portfolio.positions ?? []).map((position) =>
-    mapPositionJson(position, false),
+    toPositionUpsert(position, false),
   );
   const closed = (portfolio.closedPositions ?? []).map((position) =>
-    mapPositionJson(position, true),
+    toPositionUpsert(position, true),
   );
   return [...open, ...closed];
 }
 
-function mapPositionJson(position: BrokerPositionJson, isArchived: boolean): PositionUpsertInput {
+export function toPositionUpsert(position: BrokerPositionJson, isArchived: boolean): PositionUpsertInput {
   const symbol = normalizeSymbol(position.symbol);
   return {
     symbol,
