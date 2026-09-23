@@ -1,4 +1,7 @@
-import type { BrokerPortfolioJson, BrokerPositionJson } from "./types";
+import { createHash, randomUUID } from "crypto";
+import type { BrokerPortfolioJson, BrokerPositionJson, PositionStatus } from "./types";
+
+const STATUSES = new Set<string>(["ChuaQuyet", "ChoMua", "NamGiu", "CatLo", "ChotLoi", "BoTheoDoi", "DaDong"]);
 
 function cell(value: string | number | null | undefined): string {
   const text = value == null ? "" : String(value);
@@ -101,14 +104,111 @@ export function parsePortfolioCsv(text: string): CsvImportRow[] {
   }));
 }
 
+function asNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asStatus(value: string): PositionStatus {
+  return (STATUSES.has(value) ? value : "ChuaQuyet") as PositionStatus;
+}
+
+export function rowsToPortfolio(rows: CsvImportRow[]): BrokerPortfolioJson {
+  const bySymbol = new Map<string, BrokerPositionJson>();
+  for (const row of rows) {
+    if (!row.symbol) continue;
+    let position = bySymbol.get(row.symbol);
+    if (!position) {
+      position = {
+        symbol: row.symbol,
+        sector: row.sector,
+        status: asStatus(row.status),
+        buys: [],
+        sells: [],
+        dividends: [],
+        recommendationText: null,
+      };
+      bySymbol.set(row.symbol, position);
+    }
+    if (row.sector) position.sector = row.sector;
+    if (STATUSES.has(row.status)) position.status = asStatus(row.status);
+    if (row.kind === "position" && row.note) position.recommendationText = row.note;
+    if (row.kind === "buy") {
+      position.buys.push({
+        id: randomUUID(),
+        boughtAt: row.date || new Date().toISOString(),
+        price: asNumber(row.price) ?? 0,
+        quantity: asNumber(row.quantity),
+        note: row.note || null,
+      });
+    }
+    if (row.kind === "sell") {
+      position.sells ??= [];
+      position.sells.push({
+        id: randomUUID(),
+        soldAt: row.date || new Date().toISOString(),
+        price: asNumber(row.price) ?? 0,
+        quantity: asNumber(row.quantity),
+        fee: asNumber(row.fee),
+        tax: asNumber(row.tax),
+        note: row.note || null,
+      });
+    }
+    if (row.kind === "dividend") {
+      position.dividends ??= [];
+      position.dividends.push({
+        id: randomUUID(),
+        exDate: row.date || new Date().toISOString(),
+        amountPerShare: asNumber(row.amountPerShare) ?? 0,
+        quantity: asNumber(row.quantity) ?? 0,
+        note: row.note || null,
+      });
+    }
+  }
+  const all = [...bySymbol.values()];
+  return {
+    updatedAt: new Date().toISOString(),
+    positions: all.filter((position) => position.status !== "DaDong"),
+    closedPositions: all.filter((position) => position.status === "DaDong"),
+  };
+}
+
+export function previewHash(rows: CsvImportRow[]): string {
+  const stable = [...rows]
+    .map((row) => ({ ...row }))
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return createHash("sha256").update(JSON.stringify(stable)).digest("hex");
+}
+
+function childCounts(position: BrokerPositionJson | undefined) {
+  return {
+    buys: position?.buys?.length ?? 0,
+    sells: position?.sells?.length ?? 0,
+    dividends: position?.dividends?.length ?? 0,
+  };
+}
+
 export function diffCsvImport(current: BrokerPortfolioJson, rows: CsvImportRow[]) {
-  const existing = new Set([
-    ...(current.positions ?? []).map((p) => p.symbol.toUpperCase()),
-    ...(current.closedPositions ?? []).map((p) => p.symbol.toUpperCase()),
-  ]);
+  const currentPositions = [...(current.positions ?? []), ...(current.closedPositions ?? [])];
+  const bySymbol = new Map(currentPositions.map((position) => [position.symbol.toUpperCase(), position]));
+  const existing = new Set(bySymbol.keys());
   const incoming = new Set(rows.map((row) => row.symbol).filter(Boolean));
   const added = [...incoming].filter((symbol) => !existing.has(symbol));
   const removed = [...existing].filter((symbol) => !incoming.has(symbol));
   const unchanged = [...incoming].filter((symbol) => existing.has(symbol));
-  return { added, removed, unchanged, rowCount: rows.length };
+  const symbols = [...new Set([...existing, ...incoming])].sort();
+  const details = symbols.map((symbol) => {
+    const mine = rows.filter((row) => row.symbol === symbol);
+    return {
+      symbol,
+      before: childCounts(bySymbol.get(symbol)),
+      after: {
+        buys: mine.filter((row) => row.kind === "buy").length,
+        sells: mine.filter((row) => row.kind === "sell").length,
+        dividends: mine.filter((row) => row.kind === "dividend").length,
+      },
+    };
+  });
+  return { added, removed, unchanged, details, rowCount: rows.length, previewHash: previewHash(rows) };
 }

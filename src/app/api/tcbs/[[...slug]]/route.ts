@@ -460,7 +460,9 @@ async function previewOrder(request: Request, username: string, session: TcbsSes
     }
   }
   if (!exchange || exchange === "DERIVATIVE") return badRequestResponse("Chỉ đặt lệnh sàn HOSE, HNX hoặc UPCOM.", request);
-  const order = { ...checked.order, exchange };
+  const priced = validateEquityOrder({ ...body, accountNo: body.accountNo || session.accountNo, exchange });
+  if (!priced.ok) return badRequestResponse(priced.error, request);
+  const order = priced.order;
   const confirmToken = randomId();
   const confirms = { ...(session.extras.confirms ?? {}) };
   const now = Date.now();

@@ -21,8 +21,11 @@ export async function GET(request: Request) {
       direction: row.direction,
       price: Number(row.price),
       channel: row.channel,
+      assetType: row.assetType,
       active: row.active,
       lastFiredAt: row.lastFiredAt?.toISOString() ?? null,
+      triggeredAt: row.triggeredAt?.toISOString() ?? null,
+      triggeredPrice: row.triggeredPrice == null ? null : Number(row.triggeredPrice),
     })),
     request,
   );
@@ -40,9 +43,18 @@ export async function POST(request: Request) {
         direction: parsed.data.direction,
         price: parsed.data.price,
         channel: parsed.data.channel ?? "discord",
+        assetType: parsed.data.assetType ?? "stock",
       },
     });
-    return jsonResponse({ id: row.id, symbol: row.symbol, direction: row.direction, price: Number(row.price), channel: row.channel, active: row.active }, request);
+    return jsonResponse({
+      id: row.id,
+      symbol: row.symbol,
+      direction: row.direction,
+      price: Number(row.price),
+      channel: row.channel,
+      assetType: row.assetType,
+      active: row.active,
+    }, request);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create alert";
     return serverErrorResponse(message, request);

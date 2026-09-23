@@ -161,14 +161,17 @@ model PortfolioSnapshot {
 }
 
 model PriceAlert {
-  id          String    @id @default(uuid())
-  symbol      String
-  direction   String
-  price       Decimal   @db.Decimal(18, 4)
-  channel     String    @default("discord")
-  active      Boolean   @default(true)
-  lastFiredAt DateTime?
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(uuid())
+  symbol         String
+  direction      String
+  price          Decimal   @db.Decimal(18, 4)
+  channel        String    @default("discord")
+  assetType      String    @default("stock")
+  active         Boolean   @default(true)
+  lastFiredAt    DateTime?
+  triggeredAt    DateTime?
+  triggeredPrice Decimal?  @db.Decimal(18, 4)
+  createdAt      DateTime  @default(now())
 
   @@index([symbol])
 }

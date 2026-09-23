@@ -82,6 +82,11 @@ export const alertSchema = z.object({
   direction: z.enum(["above", "below"]),
   price: z.number().positive(),
   channel: z.enum(["discord", "telegram"]).optional(),
+  assetType: z.string().trim().min(1).max(32).optional(),
+});
+
+export const alertFireSchema = z.object({
+  price: z.number().positive(),
 });
 
 export const aiChatSchema = z.object({

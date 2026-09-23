@@ -1,3 +1,5 @@
+import { bandFromRef, onTick, priceTypeAllowed } from "./marketRules";
+
 const EXCHANGES = new Set(["HOSE", "HNX", "UPCOM"]);
 const PRICE_TYPES = new Set(["LO", "ATO", "ATC", "PLO", "MP", "MTL", "MOK", "MAK"]);
 const EXEC_TYPES = new Set(["NB", "NS"]);
@@ -54,6 +56,10 @@ export function validateEquityOrder(input: {
   price?: unknown;
   accountNo?: unknown;
   accountType?: unknown;
+  floorPrice?: unknown;
+  ceilPrice?: unknown;
+  refPrice?: unknown;
+  now?: Date;
 }): { ok: true; order: EquityOrder } | { ok: false; error: string } {
   const symbol = String(input.symbol ?? "").trim().toUpperCase();
   const execType = String(input.execType ?? "").trim().toUpperCase();
@@ -71,7 +77,11 @@ export function validateEquityOrder(input: {
   if (exchange && !EXCHANGES.has(exchange)) return { ok: false, error: "Chỉ đặt lệnh sàn HOSE, HNX hoặc UPCOM." };
   if (!accountNo) return { ok: false, error: "Thiếu số tiểu khoản." };
   if (!Number.isInteger(quantity) || quantity <= 0) return { ok: false, error: "Khối lượng phải là số nguyên > 0." };
-  if (quantity % 100 !== 0) return { ok: false, error: "Khối lượng phải là bội số của 100 (lô chẵn)." };
+  if (quantity < 100) {
+    if (priceType !== "LO") return { ok: false, error: "Lô lẻ (1–99 cổ) chỉ đặt giá LO." };
+  } else if (quantity % 100 !== 0) {
+    return { ok: false, error: "Khối lượng lô chẵn phải là bội số của 100." };
+  }
 
   const market = MARKET_PRICE_TYPES.has(priceType);
   const priced = toTcbsPrice(market ? input.price || 0.01 : input.price);
@@ -81,6 +91,25 @@ export function validateEquityOrder(input: {
   const max = maxOrderVnd();
   if (!market && notional > max) {
     return { ok: false, error: `Giá trị lệnh vượt hạn mức ${max.toLocaleString("vi-VN")} VND.` };
+  }
+  if (exchange && !priceTypeAllowed(exchange, priceType, input.now ?? new Date())) {
+    return { ok: false, error: `Loại giá ${priceType} không dùng được trên ${exchange} ở phiên hiện tại.` };
+  }
+  if (!market && exchange && !onTick(exchange, priceVnd)) {
+    return { ok: false, error: "Giá không khớp bước giá của sàn." };
+  }
+  if (!market && exchange) {
+    const floor = toTcbsPrice(input.floorPrice);
+    const ceil = toTcbsPrice(input.ceilPrice);
+    const ref = toTcbsPrice(input.refPrice);
+    const limits = floor.ok && ceil.ok
+      ? { floorVnd: floor.vnd, ceilVnd: ceil.vnd }
+      : ref.ok
+        ? bandFromRef(exchange, ref.vnd)
+        : null;
+    if (limits && (priceVnd < limits.floorVnd || priceVnd > limits.ceilVnd)) {
+      return { ok: false, error: `Giá phải trong khoảng ${limits.floorVnd.toLocaleString("vi-VN")} – ${limits.ceilVnd.toLocaleString("vi-VN")} đồng.` };
+    }
   }
 
   return {

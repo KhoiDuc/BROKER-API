@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     const prices = new Map<string, number | null>();
     let fired = 0;
     for (const alert of alerts) {
+      if (alert.assetType !== "stock") continue;
       if (!prices.has(alert.symbol)) prices.set(alert.symbol, await fetchLastPrice(alert.symbol));
       const last = prices.get(alert.symbol);
       if (last == null) continue;
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
       fired++;
       await prisma.priceAlert.update({
         where: { id: alert.id },
-        data: { lastFiredAt: new Date(), active: false },
+        data: { lastFiredAt: new Date(), triggeredAt: new Date(), triggeredPrice: last, active: false },
       });
     }
     return jsonResponse({ checked: alerts.length, fired });
