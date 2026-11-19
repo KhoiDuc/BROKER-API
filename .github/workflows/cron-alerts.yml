@@ -1,0 +1,16 @@
+name: Cron Alerts
+
+on:
+  schedule:
+    - cron: "*/15 1-8 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  fire-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger alerts cron
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ vars.BROKER_API_URL }}/api/cron/alerts"
