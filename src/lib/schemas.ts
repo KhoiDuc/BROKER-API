@@ -91,7 +91,7 @@ export const alertFireSchema = z.object({
 
 export const aiChatSchema = z.object({
   prompt: z.string().trim().min(1).max(12000),
-  model: z.string().trim().min(1).max(80).optional(),
+  model: z.string().trim().min(1).max(80).nullish(),
 });
 
 export const toeicDailySchema = z.object({
