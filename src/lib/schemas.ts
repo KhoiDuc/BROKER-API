@@ -93,3 +93,9 @@ export const aiChatSchema = z.object({
   prompt: z.string().trim().min(1).max(12000),
   model: z.string().trim().min(1).max(80).optional(),
 });
+
+export const toeicDailySchema = z.object({
+  dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  topicId: z.string().trim().min(1).max(64),
+  words: z.array(z.string().trim().min(1)).min(1).max(20),
+});

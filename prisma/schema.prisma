@@ -175,3 +175,15 @@ model PriceAlert {
 
   @@index([symbol])
 }
+
+model ToeicDailyHistory {
+  id        String   @id @default(uuid())
+  username  String
+  dateKey   String
+  topicId   String
+  words     String[]
+  createdAt DateTime @default(now())
+
+  @@unique([username, dateKey])
+  @@index([username])
+}
