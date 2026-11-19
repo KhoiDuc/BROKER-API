@@ -1,5 +1,5 @@
 {
-  "buildCommand": "prisma generate && next build",
+  "buildCommand": "prisma generate && prisma migrate deploy && next build",
   "crons": [
     { "path": "/api/cron/snapshots", "schedule": "0 8 * * 1-5" },
     { "path": "/api/cron/alerts", "schedule": "*/15 1-8 * * 1-5" }
